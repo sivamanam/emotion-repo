@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Emotion and Gender Detection</title>
+    <style>
+        /* Your existing CSS */
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            margin: 0;
+            height: 100vh;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+        #container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+        #webcam {
+            width: 30%;
+            border: 5px solid #4CAF50;
+            border-radius: 15px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.3);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        #webcam:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+        #results-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 20px;
+        }
+        #emotions-results, #genders-results {
+            width: 100%;
+            max-width: 600px;
+            margin-bottom: 20px;
+        }
+        .results-row {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+        .result {
+            display: flex;
+            align-items: center;
+            font-size: 24px;
+            margin: 5px;
+        }
+        .result span {
+            margin-right: 10px;
+            font-size: 30px;
+        }
+        #logo {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 150px;
+            height: auto;
+            z-index: 1000;
+        }
+        button {
+            margin: 20px;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            color: #fff;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.2s;
+        }
+        #capture-btn {
+            background-color: #4CAF50;
+        }
+        #capture-btn:hover {
+            background-color: #45a049;
+        }
+        #capture-btn:active {
+            transform: scale(0.98);
+        }
+        #reset-btn {
+            background-color: #f44336;
+        }
+        #reset-btn:hover {
+            background-color: #e53935;
+        }
+        #reset-btn:active {
+            transform: scale(0.98);
+        }
+        .gender-result {
+            font-size: 30px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <img id="logo" src="{{ url_for('static', filename='logo.png') }}" alt="Logo">
+    <div id="container">
+        <video id="webcam" autoplay></video>
+        <div id="results-container">
+            <div id="emotions-results" class="results-row">
+                <!-- Emotions will be added here -->
+            </div>
+            <div id="genders-results" class="results-row">
+                <!-- Genders will be added here -->
+            </div>
+        </div>
+    </div>
+    <button id="capture-btn">Capture</button>
+    <button id="reset-btn">Reset</button>
+
+    <script>
+        const webcam = document.getElementById('webcam');
+        const captureBtn = document.getElementById('capture-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        const emotionsResultsDiv = document.getElementById('emotions-results');
+        const gendersResultsDiv = document.getElementById('genders-results');
+
+        async function setupWebcam() {
+            try {
+                // Access the default webcam
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                webcam.srcObject = stream;
+            } catch (error) {
+                console.error('Error accessing webcam:', error);
+            }
+        }
+
+        captureBtn.addEventListener('click', () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = webcam.videoWidth;
+            canvas.height = webcam.videoHeight;
+            const context = canvas.getContext('2d');
+            context.drawImage(webcam, 0, 0, canvas.width, canvas.height);
+            const imageData = canvas.toDataURL('image/png');
+
+            fetch('/capture', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `image=${encodeURIComponent(imageData)}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                displayEmotionAndGenderCounts(data);
+            })
+            .catch(error => {
+                console.error('Error capturing image:', error);
+            });
+        });
+
+        resetBtn.addEventListener('click', () => {
+            emotionsResultsDiv.innerHTML = '';
+            gendersResultsDiv.innerHTML = '';
+            fetch('/reset', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    displayEmotionAndGenderCounts(data);
+                });
+        });
+
+        function displayEmotionAndGenderCounts(data) {
+            emotionsResultsDiv.innerHTML = '';
+            gendersResultsDiv.innerHTML = '';
+
+            const emojis = {
+                happy: '😊',
+                sad: '😢',
+                angry: '😠',
+                surprised: '😲',
+                calm: '😌',
+                confused: '😕',
+                fearful: '😨',
+                disgusted: '😖'
+            };
+
+            const genders = {
+                Male: '👨',
+                Female: '👩'
+            };
+
+            const emotions = Object.entries(data.emotions).map(([emotion, count]) => {
+                return {
+                    emotion: emotion,
+                    count: count,
+                    emoji: emojis[emotion]
+                };
+            });
+
+            const genderCounts = Object.entries(data.genders).map(([gender, count]) => {
+                return {
+                    gender: gender,
+                    count: count,
+                    emoji: genders[gender]
+                };
+            });
+
+            emotions.forEach(({ emotion, count, emoji }) => {
+                const div = document.createElement('div');
+                div.className = 'result';
+                div.innerHTML = `<span>${emoji}</span>${emotion.charAt(0).toUpperCase() + emotion.slice(1)}: ${count}`;
+                emotionsResultsDiv.appendChild(div);
+            });
+
+            genderCounts.forEach(({ gender, count, emoji }) => {
+                const div = document.createElement('div');
+                div.className = 'result gender-result';
+                div.innerHTML = `<span>${emoji}</span>${gender}: ${count}`;
+                gendersResultsDiv.appendChild(div);
+            });
+        }
+
+        // Initialize webcam
+        setupWebcam();
+    </script>
+</body>
+</html>
